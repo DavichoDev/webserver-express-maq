@@ -1,39 +1,79 @@
-const { response, request } = require('express')
+const { response, request } = require('express');
+const Usuario = require('../models/usuario');
+const bcryptjs = require('bcryptjs');
+const { countDocuments } = require('../models/usuario');
 
-const usuariosGET = (req = request, res = response) => {
+const usuariosGET = async (req = request, res = response) => {
 
-    const query = req.query;
+    const { limite = 5, desde = 0 } = req.query;
+    const query = { estado: true };
 
-    res.status(201).json({
-        msg: 'GET Api',
-        query
+    const [ total, usuarios ] = await Promise.all([
+        // Total de usuarios disponibles
+        Usuario.countDocuments(query),
+        // Usuarios dependiendo de paginación
+        Usuario.find(query)
+        .skip( Number(desde) )
+        .limit( Number(limite) ),
+    ]);
+
+    res.json({
+        total,
+        usuarios
     });
 };
 
-const usuariosPOST = (req = request, res = response) => {
+const usuariosPOST = async (req = request, res = response) => {
 
-    const body = req.body;
+    try {
+        
+        const { nombre, correo, password, rol } = req.body;
+        const usuario = new Usuario( {nombre, correo, password, rol} );
 
-    res.status(201).json({
-        msg: 'POST Api',
-        body
-    });
+        // Encriptar la contrasena
+        const salt = bcryptjs.genSaltSync();
+        usuario.password = bcryptjs.hashSync( password, salt );
+
+        // Guardar en la DB
+        await usuario.save();
+
+        res.status(201).json({
+            usuario
+        });
+        
+    } catch (error) {
+        console.log(error);
+    }
+
 };
 
-const usuariosPUT = (req = request, res = response) => {
+const usuariosPUT = async (req = request, res = response) => {
 
-    const id = req.params.id;
+    const { id } = req.params;
 
-    res.status(201).json({
-        msg: 'PUT Api',
-        id
-    });
+    const { password, google, ...resto } = req.body;
+
+    if( password ) { 
+        // Encriptar la contrasena
+        const salt = bcryptjs.genSaltSync();
+        resto.password = bcryptjs.hashSync( password, salt );
+     }
+
+    const usuario = await Usuario.findByIdAndUpdate( id, resto );
+
+    res.json( usuario );
 };
 
-const usuariosDELETE = (req = request, res = response) => {
-    res.status(201).json({
-        msg: 'DELETE Api'
-    });
+const usuariosDELETE = async (req = request, res = response) => {
+
+    const { id } =  req.params;
+
+    // Borrado fisicamente
+    // const usuario = await Usuario.findByIdAndDelete( id );
+
+    const usuario = await Usuario.findByIdAndUpdate(id, { estado: false });
+
+    res.status(201).json(usuario);
 };
 
 const usuariosPATCH = (req = request, res = response) => {
@@ -48,4 +88,4 @@ module.exports = {
     usuariosPOST,
     usuariosDELETE,
     usuariosPATCH,
-}
+};
